@@ -54,6 +54,13 @@ Singleton {
         item.destroy();
     }
 
+    function finishLater(item, response) {
+        if (!item || item.finished || item.finishing)
+            return;
+        item.finishing = true;
+        Qt.callLater(() => root.finish(item, response));
+    }
+
     function startWatch() {
         if (watching) {
             watchObject?.reconnect();
@@ -107,6 +114,7 @@ Singleton {
             property var callback
             property int timeoutMs: 5000
             property bool finished: false
+            property bool finishing: false
 
             Socket {
                 id: requestSocket
@@ -133,10 +141,10 @@ Singleton {
                         write(JSON.stringify({ cmd: requestObject.command, payload: requestObject.payload }) + "\n");
                         flush();
                     } else if (!requestObject.finished) {
-                        root.finish(requestObject, { error: "Connection to kcd was lost" });
+                        root.finishLater(requestObject, { error: "Connection to kcd was lost" });
                     }
                 }
-                onError: error => root.finish(requestObject, { error: "Could not connect to kcd" })
+                onError: error => root.finishLater(requestObject, { error: "Could not connect to kcd" })
             }
             property var socket: requestSocket
             Timer {
@@ -196,8 +204,10 @@ Singleton {
                     }
                 }
                 onError: error => {
-                    watchSocket.connected = false;
-                    root.watchLost();
+                    Qt.callLater(() => {
+                        watchSocket.connected = false;
+                        root.watchLost();
+                    });
                 }
             }
             function reconnect() {

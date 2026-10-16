@@ -141,6 +141,7 @@ Singleton {
 
     function normalizeDevice(device) {
         const paired = device.state === "PAIRED";
+        const strength = device.signal?.signalStrengths?.[Object.keys(device.signal?.signalStrengths || {})[0]];
         const normalized = {
             id: device.id,
             name: device.name || device.id,
@@ -151,8 +152,8 @@ Singleton {
             pairingRequestedByPeer: device.state === "PAIR_REQUESTED_BY_PEER",
             batteryCharge: device.battery?.charge ?? -1,
             batteryCharging: device.battery?.charging ?? false,
-            networkType: "",
-            networkStrength: -1,
+            networkType: strength?.networkType || "",
+            networkStrength: strength?.signalStrength ?? -1,
             sftpMounted: !!device.sftp?.mounted,
             sftpMountPoint: device.sftp?.mountPoint || "",
             media: null,
@@ -279,11 +280,15 @@ Singleton {
     function startBrowsing(id, callback) {
         mountSftp(id, response => {
             const path = response.result?.path || "";
-            if (!response.error && path.startsWith("/")) {
-                const encodedPath = path.split("/").map(segment => encodeURIComponent(segment)).join("/");
-                Qt.openUrlExternally("file://" + encodedPath);
+            if (response.error || !path.startsWith("/")) {
+                callback?.(response.error ? response : { error: "kcd returned an invalid phone storage path" });
+                return;
             }
-            callback?.(response);
+            const encodedPath = path.split("/").map(segment => encodeURIComponent(segment)).join("/");
+            Qt.callLater(() => {
+                const opened = Qt.openUrlExternally("file://" + encodedPath);
+                callback?.(opened ? response : { error: "Could not open the phone storage in a file manager" });
+            });
         });
     }
     function browseDevice(id, callback) {
