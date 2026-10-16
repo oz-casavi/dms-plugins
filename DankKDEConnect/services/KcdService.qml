@@ -278,6 +278,18 @@ Singleton {
     function cancelPairing(id, callback) { action("unpair", { deviceId: id }, callback); }
     function unpair(id, callback) { cancelPairing(id, callback); }
     function setLocked(id, locked, callback) { action(locked ? "lock" : "unlock", { deviceId: id }, callback); }
+    function getNetworkIcon(device) {
+        if (!device || device.networkStrength < 0)
+            return "";
+        if (device.networkStrength >= 4)
+            return "signal_cellular_alt";
+        if (device.networkStrength >= 2)
+            return "signal_cellular_alt_2_bar";
+        if (device.networkStrength >= 1)
+            return "signal_cellular_alt_1_bar";
+        return "signal_cellular_null";
+    }
+
     function getRemoteCommands(id, callback) { action("run_list", { deviceId: id }, r => callback?.(r.error ? [] : (r.result || [])), 12000); }
     function triggerRemoteCommand(id, key, callback) { action("run_exec", { deviceId: id, key: key }, callback); }
     function mprisAction(id, act, callback) { action("mpris_action", { deviceId: id, action: act }, callback); }

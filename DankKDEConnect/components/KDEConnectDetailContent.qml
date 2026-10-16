@@ -59,6 +59,16 @@ Item {
         });
     }
 
+    function browseDeviceFiles(deviceId) {
+        PhoneConnectService.startBrowsing(deviceId, function (response) {
+            if (response.error) {
+                ToastService.showError(I18n.trFor("dankKDEConnect", "Failed to browse device", "Phone Connect error"), response.error);
+                return;
+            }
+            ToastService.showInfo(I18n.trFor("dankKDEConnect", "Opening file browser", "Phone Connect browse action") + "...");
+        });
+    }
+
     readonly property string effectiveDeviceId: (() => {
             if (selectedDeviceId && PhoneConnectService.deviceIds.includes(selectedDeviceId))
                 return selectedDeviceId;
@@ -482,7 +492,7 @@ Item {
                                 root.smsDeviceId = modelData;
                             } else if (action === "browse") {
                                 PopoutService.closeControlCenter();
-                                PhoneConnectService.startBrowsing(modelData, function () {});
+                                root.browseDeviceFiles(modelData);
                             } else if (action === "pair") {
                                 PhoneConnectService.requestPairing(modelData, function () {});
                             } else if (action === "acceptPair") {
@@ -660,7 +670,7 @@ Item {
                                         root.shareDeviceId = "";
                                         root.smsDeviceId = "";
                                         PopoutService.closeControlCenter();
-                                        PhoneConnectService.startBrowsing(root.activeDeviceId, function () {});
+                                        root.browseDeviceFiles(root.activeDeviceId);
                                     }
                                 }
                             }
