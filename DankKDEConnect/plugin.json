@@ -1,7 +1,7 @@
 {
     "id": "dankKDEConnect",
     "name": "Phone Connect",
-    "description": "Control connected devices via KDE Connect or Valent - view battery, send files, find phone, and more",
+    "description": "Control connected devices via KDE Connect, Valent, or kcd - view battery, send files, find phone, and more",
     "version": "3.0.0",
     "license": "MIT",
     "author": "Avenge Media",

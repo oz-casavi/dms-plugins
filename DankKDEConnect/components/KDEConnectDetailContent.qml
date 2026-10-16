@@ -790,6 +790,7 @@ Item {
         // SMS dialog
         SmsDialog {
             isOpen: root.smsDeviceId === root.effectiveDeviceId
+            showLaunchApp: PhoneConnectService.supportsSmsApp
             width: parent.width
             deviceId: root.effectiveDeviceId
             onClose: root.smsDeviceId = ""

@@ -64,6 +64,7 @@ PluginSettings {
         Component.onCompleted: {
             refreshDeviceTypeMap();
             refreshDeviceImageMap();
+            KcdTransport.configuredSocketPath = loadValue("kcdSocketPath", "");
         }
 
         Connections {
@@ -192,6 +193,51 @@ PluginSettings {
 
 
 
+        Column {
+            width: parent.width
+            spacing: Theme.spacingS
+
+            StyledText { text: I18n.tr("Phone connection backend"); font.weight: Font.Medium; color: Theme.surfaceText }
+            StyledText {
+                text: I18n.tr("Auto keeps KDE Connect and Valent precedence, then uses kcd when neither is available. Choosing kcd can activate its local socket service. kcd does not report per-device plugin support, so some actions may be unavailable on a phone.")
+                font.pixelSize: Theme.fontSizeSmall
+                color: Theme.surfaceVariantText
+                width: parent.width
+                wrapMode: Text.WordWrap
+            }
+            DankDropdown {
+                width: parent.width
+                compactMode: true
+                dropdownWidth: 200
+                currentValue: ["None", "KDE Connect", "Valent", "Auto", "kcd"][PhoneConnectService.preferredBackend] || "Auto"
+                options: ["Auto", "KDE Connect", "Valent", "kcd"]
+                onValueChanged: function(value) {
+                    const backends = { "Auto": 3, "KDE Connect": 1, "Valent": 2, "kcd": 4 };
+                    PhoneConnectService.setPreferredBackend(backends[value]);
+                }
+            }
+            DankTextField {
+                id: kcdSocketPathField
+                width: parent.width
+                visible: PhoneConnectService.preferredBackend === 4
+                placeholderText: I18n.tr("kcd socket path (optional)")
+                text: mainSettingsCol.loadValue("kcdSocketPath", "")
+                onEditingFinished: {
+                    KcdTransport.configuredSocketPath = text.trim();
+                    mainSettingsCol.saveValue("kcdSocketPath", KcdTransport.configuredSocketPath);
+                }
+            }
+            DankButton {
+                visible: PhoneConnectService.activeBackend === 4
+                text: I18n.tr("Discover devices for 30 seconds")
+                iconName: "search"
+                onClicked: PhoneConnectService.startDiscovery(response => {
+                    if (response.error)
+                        ToastService.showError(I18n.tr("Device discovery failed"), response.error);
+                })
+            }
+        }
+
         // 1. Connection Status Card
         Rectangle {
             width: parent.width
@@ -227,7 +273,7 @@ PluginSettings {
                             color: Theme.surfaceText 
                         }
                         StyledText { 
-                            text: PhoneConnectService.available ? ("Announced as: " + PhoneConnectService.announcedName + " (" + PhoneConnectService.selfId + ")") : "Please start kdeconnectd or Valent"
+                            text: PhoneConnectService.available ? ("Announced as: " + PhoneConnectService.announcedName + " (" + PhoneConnectService.selfId + ")") : (PhoneConnectService.activeBackend === 4 ? I18n.tr("Could not connect to kcd at ") + KcdTransport.socketPath : I18n.tr("Start KDE Connect or Valent, or select kcd to connect to its local socket"))
                             font.pixelSize: Theme.fontSizeSmall
                             color: Theme.surfaceVariantText 
                             width: parent.width

@@ -1,3 +1,5 @@
 singleton KDEConnectService 1.0 ../services/KDEConnectService.qml
 singleton ValentService 1.0 ../services/ValentService.qml
+singleton KcdTransport 1.0 ../services/KcdTransport.qml
+singleton KcdService 1.0 ../services/KcdService.qml
 singleton PhoneConnectService 1.0 ../services/PhoneConnectService.qml

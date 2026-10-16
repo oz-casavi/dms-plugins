@@ -13,6 +13,7 @@ StyledRect {
     }
 
     property string deviceId: ""
+    property bool showLaunchApp: true
 
     signal close
     signal sendSms(string phoneNumber, string message)
@@ -379,6 +380,7 @@ StyledRect {
 
                 StyledRect {
                     id: openAppBtn
+                    visible: root.showLaunchApp
                     Layout.fillWidth: true
                     Layout.preferredWidth: 1
                     height: 36

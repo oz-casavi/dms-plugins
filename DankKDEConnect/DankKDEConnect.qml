@@ -701,7 +701,9 @@ PluginComponent {
                     ToastService.showError(I18n.trFor("dankKDEConnect", "Pairing failed", "Phone Connect error"), response.error);
                     return;
                 }
-                ToastService.showInfo(I18n.trFor("dankKDEConnect", "Pairing request sent", "Phone Connect pairing action"));
+                const verificationKey = response.result?.verificationKey;
+                const message = I18n.trFor("dankKDEConnect", "Pairing request sent", "Phone Connect pairing action");
+                ToastService.showInfo(verificationKey ? (message + " · " + verificationKey) : message);
             });
             break;
         case "acceptPair":
@@ -1677,6 +1679,7 @@ PluginComponent {
                         SmsDialog {
                             id: popoutSmsDialog
                             isOpen: root.showSmsDialog && root.shareDeviceId === root.selectedDeviceId
+                            showLaunchApp: PhoneConnectService.supportsSmsApp
                             width: parent.width
                             deviceId: root.shareDeviceId
                             onClose: root.showSmsDialog = false

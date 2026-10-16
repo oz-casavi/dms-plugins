@@ -13,16 +13,19 @@ Singleton {
     enum Backend {
         None,
         KDEConnect,
-        Valent
+        Valent,
+        Auto,
+        Kcd
     }
 
-    property int preferredBackend: PhoneConnectService.Backend.KDEConnect
+    property int preferredBackend: PhoneConnectService.Backend.Auto
     property int activeBackend: PhoneConnectService.Backend.None
 
-    readonly property bool available: activeBackend !== PhoneConnectService.Backend.None
+    readonly property bool available: _backend?.available ?? false
     readonly property bool initialized: available && (_backend?.initialized ?? false)
     readonly property bool isRefreshing: _backend?.isRefreshing ?? false
     readonly property bool supportsSms: _backend?.supportsSms ?? false
+    readonly property bool supportsSmsApp: _backend?.supportsSmsApp ?? false
 
     readonly property string announcedName: _backend?.announcedName ?? ""
     readonly property string selfId: _backend?.selfId ?? ""
@@ -55,6 +58,8 @@ Singleton {
             return "KDE Connect";
         case PhoneConnectService.Backend.Valent:
             return "Valent";
+        case PhoneConnectService.Backend.Kcd:
+            return "kcd";
         default:
             return "None";
         }
@@ -74,6 +79,8 @@ Singleton {
     signal backendChanged
 
     Component.onCompleted: {
+        const savedBackend = PluginService.loadPluginData("dankKDEConnect", "preferredBackend", PhoneConnectService.Backend.Auto);
+        preferredBackend = Number.isInteger(Number(savedBackend)) ? Number(savedBackend) : PhoneConnectService.Backend.Auto;
         watchBusNames();
         detectBackend();
         updateDeviceTypeMap();
@@ -176,9 +183,27 @@ Singleton {
         }
     }
 
+    Connections {
+        target: KcdService
+        enabled: activeBackend === PhoneConnectService.Backend.Kcd
+        function onDevicesListChanged() { root.devicesListChanged(); }
+        function onDeviceUpdated(deviceId) { root.deviceUpdated(deviceId); }
+        function onDeviceAdded(deviceId) { root.deviceAdded(deviceId); }
+        function onDeviceRemoved(deviceId) { root.deviceRemoved(deviceId); }
+        function onPairingRequestReceived(deviceId, verificationKey) { root.pairingRequestReceived(deviceId, verificationKey); }
+        function onShareReceived(deviceId, url) { root.shareReceived(deviceId, url); }
+    }
+
     function detectBackend() {
-        if (!DMSService.isConnected)
+        if (preferredBackend === PhoneConnectService.Backend.Kcd) {
+            selectBackend(PhoneConnectService.Backend.Kcd);
             return;
+        }
+        if (!DMSService.isConnected) {
+            if (preferredBackend === PhoneConnectService.Backend.Auto)
+                selectBackend(PhoneConnectService.Backend.Kcd);
+            return;
+        }
 
         DMSService.dbusListNames("session", function (response) {
             if (response.error)
@@ -194,32 +219,52 @@ Singleton {
                 newBackend = PhoneConnectService.Backend.KDEConnect;
             } else if (preferredBackend === PhoneConnectService.Backend.Valent && hasValent) {
                 newBackend = PhoneConnectService.Backend.Valent;
+            } else if (preferredBackend === PhoneConnectService.Backend.KDEConnect || preferredBackend === PhoneConnectService.Backend.Valent) {
+                newBackend = PhoneConnectService.Backend.None;
             } else if (hasKDE) {
                 newBackend = PhoneConnectService.Backend.KDEConnect;
             } else if (hasValent) {
                 newBackend = PhoneConnectService.Backend.Valent;
+            } else if (preferredBackend === PhoneConnectService.Backend.Auto) {
+                newBackend = PhoneConnectService.Backend.Kcd;
             }
-
-            if (newBackend !== activeBackend) {
-                activeBackend = newBackend;
-                switch (activeBackend) {
-                case PhoneConnectService.Backend.KDEConnect:
-                    _backend = KDEConnectService;
-                    break;
-                case PhoneConnectService.Backend.Valent:
-                    _backend = ValentService;
-                    break;
-                default:
-                    _backend = null;
-                }
-                backendChanged();
-                devicesListChanged();
-            }
+            selectBackend(newBackend);
         });
+    }
+
+    function selectBackend(backend) {
+        if (backend === activeBackend)
+            return;
+        if (activeBackend === PhoneConnectService.Backend.Kcd)
+            KcdService.active = false;
+        activeBackend = backend;
+        switch (backend) {
+        case PhoneConnectService.Backend.KDEConnect: _backend = KDEConnectService; break;
+        case PhoneConnectService.Backend.Valent: _backend = ValentService; break;
+        case PhoneConnectService.Backend.Kcd: _backend = KcdService; KcdService.activate(); break;
+        default: _backend = null;
+        }
+        backendChanged();
+        devicesListChanged();
+    }
+
+    function setPreferredBackend(backend) {
+        preferredBackend = backend;
+        PluginService.savePluginData("dankKDEConnect", "preferredBackend", backend);
+        PluginService.setGlobalVar("dankKDEConnect", "preferredBackend", backend);
+        detectBackend();
     }
 
     function refreshDevices() {
         _backend?.refreshDevices();
+    }
+
+    function startDiscovery(callback) {
+        if (activeBackend !== PhoneConnectService.Backend.Kcd) {
+            callback?.({ error: "Discovery is only available with kcd" });
+            return;
+        }
+        KcdService.startDiscovery(callback);
     }
 
     function getDevice(deviceId) {
@@ -228,7 +273,14 @@ Singleton {
 
     function hasPlugin(deviceId, pluginName) {
         const dev = getDevice(deviceId);
-        if (!dev || !dev.supportedPlugins)
+        if (!dev)
+            return false;
+
+        if (activeBackend === PhoneConnectService.Backend.Kcd && ["photo", "requestPhoto", "smsapp"].includes(pluginName))
+            return false;
+        if (activeBackend === PhoneConnectService.Backend.Kcd)
+            return ["pair", "ping", "findmyphone", "battery", "connectivity_report", "clipboard", "share", "sftp", "mpris", "runcommand", "sms"].includes(pluginName);
+        if (!dev.supportedPlugins)
             return false;
 
         return dev.supportedPlugins.includes(pluginName) || dev.supportedPlugins.includes("kdeconnect_" + pluginName);
@@ -265,6 +317,10 @@ Singleton {
     }
 
     function shareFile(deviceId, path, callback) {
+        if (activeBackend === PhoneConnectService.Backend.Kcd) {
+            _backend?.shareFile(deviceId, localFileUrl(path), callback);
+            return;
+        }
         const url = localFileUrl(path);
         if (url === "") {
             callback?.({
@@ -485,6 +541,10 @@ Singleton {
             callback?.({
                 error: "No backend"
             });
+            return;
+        }
+        if (activeBackend === PhoneConnectService.Backend.Kcd) {
+            _backend.sendSms(deviceId, addresses, message, attachmentUrls, callback);
             return;
         }
         _backend.sendSms(deviceId, addresses, message, attachmentUrls, callback);

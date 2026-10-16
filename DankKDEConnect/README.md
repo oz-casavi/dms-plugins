@@ -1,6 +1,14 @@
 # DankKDEConnect / Phone Connect Plugin
 
-Connect your phone to your desktop. Supports both KDE Connect and Valent backends.
+Connect your phone to your desktop. Supports KDE Connect, Valent, and kcd backends.
+
+## kcd backend
+
+Select **Auto** to keep KDE Connect and Valent precedence and use kcd when neither is available, or choose kcd explicitly in plugin settings. Connecting to kcd can activate its local socket service. DMS does not enable or configure system services.
+
+kcd uses `$XDG_RUNTIME_DIR/kcd/kcd.sock` by default. Set an optional socket path in plugin settings or use `KCD_SOCKET`. kcd currently supports device status, pairing, ring, ping, clipboard, file sending, SFTP browsing, basic media controls, remote commands, and one-recipient plain SMS. URL/text sharing, the SMS app launcher, camera requests, and conversations are unavailable. Feature support depends on the connected phone and kcd configuration.
+
+SFTP browsing requires `sshfs`.
 
 ## Requirements
 
