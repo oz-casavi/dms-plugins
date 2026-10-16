@@ -106,9 +106,11 @@ Singleton {
                 updated.batteryCharge = data.charge ?? -1;
                 updated.batteryCharging = data.charging ?? false;
             } else if (event.type === "connectivity.update") {
-                const strength = data.signalStrengths?.[Object.keys(data.signalStrengths || {})[0]];
-                updated.networkType = strength?.networkType || "";
-                updated.networkStrength = strength?.signalStrength ?? -1;
+                const signal = root.bestSignal(data);
+                if (signal) {
+                    updated.networkType = signal.networkType;
+                    updated.networkStrength = signal.signalStrength;
+                }
             } else if (event.type === "mpris.update") {
                 root.applyMedia(updated, data, 0);
             } else if (event.type === "sftp.mounted") {
@@ -141,7 +143,7 @@ Singleton {
 
     function normalizeDevice(device) {
         const paired = device.state === "PAIRED";
-        const strength = device.signal?.signalStrengths?.[Object.keys(device.signal?.signalStrengths || {})[0]];
+        const signal = root.bestSignal(device.signal);
         const normalized = {
             id: device.id,
             name: device.name || device.id,
@@ -152,8 +154,8 @@ Singleton {
             pairingRequestedByPeer: device.state === "PAIR_REQUESTED_BY_PEER",
             batteryCharge: device.battery?.charge ?? -1,
             batteryCharging: device.battery?.charging ?? false,
-            networkType: strength?.networkType || "",
-            networkStrength: strength?.signalStrength ?? -1,
+            networkType: signal?.networkType || "",
+            networkStrength: signal?.signalStrength ?? -1,
             sftpMounted: !!device.sftp?.mounted,
             sftpMountPoint: device.sftp?.mountPoint || "",
             media: null,
@@ -161,6 +163,33 @@ Singleton {
         };
         root.applyMedia(normalized, device.media, device.media?.mediaAgeMs ?? 0);
         return normalized;
+    }
+
+    function bestSignal(report) {
+        const signalStrengths = report?.signalStrengths;
+        if (!signalStrengths || typeof signalStrengths !== "object")
+            return null;
+
+        const candidates = Object.values(signalStrengths)
+            .filter(signal => Number.isFinite(signal?.signalStrength) && signal.signalStrength >= 0)
+            .map(signal => {
+                const detailedType = (signal.networkDetailedType || "").trim();
+                const networkType = (detailedType || signal.networkType || "").trim();
+                return {
+                    networkType,
+                    signalStrength: signal.signalStrength,
+                    hasKnownType: networkType !== "" && networkType.toLowerCase() !== "unknown"
+                };
+            });
+        if (candidates.length === 0)
+            return null;
+
+        candidates.sort((left, right) => {
+            if (left.hasKnownType !== right.hasKnownType)
+                return left.hasKnownType ? -1 : 1;
+            return right.signalStrength - left.signalStrength;
+        });
+        return candidates[0];
     }
 
     function applyMedia(device, media, ageMs) {
