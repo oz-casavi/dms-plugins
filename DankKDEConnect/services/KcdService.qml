@@ -15,6 +15,7 @@ Singleton {
     readonly property bool supportsSmsApp: false
     property var deviceIds: []
     property var devices: ({})
+    property var _activeNotifications: ({})
     property string announcedName: "kcd"
     property string selfId: ""
     readonly property var connectedDevices: deviceIds.map(id => devices[id]).filter(device => device?.isReachable)
@@ -60,6 +61,7 @@ Singleton {
             if (event.type === "state.snapshot") {
                 const incoming = event.payload?.devices || [];
                 const next = {};
+                root._activeNotifications = {};
                 for (const device of incoming)
                     next[device.id] = root.normalizeDevice(device);
                 root.applyDevices(next);
@@ -78,8 +80,11 @@ Singleton {
             if (event.type === "device.disconnected") {
                 const current = root.devices[id];
                 if (current) {
+                    const activeNotifications = Object.assign({}, root._activeNotifications);
+                    delete activeNotifications[id];
+                    root._activeNotifications = activeNotifications;
                     const next = Object.assign({}, root.devices);
-                    next[id] = Object.assign({}, current, { isReachable: false });
+                    next[id] = Object.assign({}, current, { isReachable: false, notificationCount: 0 });
                     root.applyMedia(next[id], null, 0);
                     root.devices = next;
                     root.deviceUpdated(id);
@@ -87,6 +92,9 @@ Singleton {
                 return;
             }
             if (event.type === "device.removed") {
+                const activeNotifications = Object.assign({}, root._activeNotifications);
+                delete activeNotifications[id];
+                root._activeNotifications = activeNotifications;
                 const next = Object.assign({}, root.devices);
                 delete next[id];
                 root.applyDevices(next);
@@ -102,7 +110,20 @@ Singleton {
             const next = Object.assign({}, root.devices);
             const updated = Object.assign({}, current);
             const data = event.payload || {};
-            if (event.type === "battery.update") {
+            if (event.type === "notification" || event.type === "notification.canceled") {
+                const notificationId = data.id;
+                if (notificationId === undefined || notificationId === null || notificationId === "")
+                    return;
+                const activeNotifications = Object.assign({}, root._activeNotifications);
+                const deviceNotifications = Object.assign({}, activeNotifications[id] || {});
+                if (event.type === "notification")
+                    deviceNotifications[notificationId] = true;
+                else
+                    delete deviceNotifications[notificationId];
+                activeNotifications[id] = deviceNotifications;
+                root._activeNotifications = activeNotifications;
+                updated.notificationCount = Object.keys(deviceNotifications).length;
+            } else if (event.type === "battery.update") {
                 updated.batteryCharge = data.charge ?? -1;
                 updated.batteryCharging = data.charging ?? false;
             } else if (event.type === "connectivity.update") {
@@ -129,8 +150,9 @@ Singleton {
                 root.initialized = false;
                 root.available = false;
                 const stale = Object.assign({}, root.devices);
+                root._activeNotifications = {};
                 for (const id in stale) {
-                    stale[id] = Object.assign({}, stale[id], { isReachable: false });
+                    stale[id] = Object.assign({}, stale[id], { isReachable: false, notificationCount: 0 });
                     root.applyMedia(stale[id], null, 0);
                 }
                 root.devices = stale;
@@ -156,6 +178,7 @@ Singleton {
             batteryCharging: device.battery?.charging ?? false,
             networkType: signal?.networkType || "",
             networkStrength: signal?.signalStrength ?? -1,
+            notificationCount: 0,
             sftpMounted: !!device.sftp?.mounted,
             sftpMountPoint: device.sftp?.mountPoint || "",
             media: null,
@@ -234,8 +257,11 @@ Singleton {
             if (response.error)
                 return;
             const next = {};
-            for (const device of (response.result || []))
-                next[device.id] = normalizeDevice(device);
+            for (const device of (response.result || [])) {
+                const normalized = normalizeDevice(device);
+                normalized.notificationCount = devices[device.id]?.notificationCount ?? 0;
+                next[device.id] = normalized;
+            }
             applyDevices(next);
             initialized = true;
             available = true;
